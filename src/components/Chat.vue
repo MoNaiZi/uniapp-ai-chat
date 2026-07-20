@@ -1,0 +1,426 @@
+<script setup>
+import { ref, onMounted } from "vue";
+import { initModel, chat, getModelStatus } from "../ai/model";
+
+const input = ref("");
+const messages = ref([]);
+const modelStatus = ref({ isLoading: false, isLoaded: false });
+const isSending = ref(false);
+const error = ref(null);
+const progress = ref(0);
+
+async function loadModel() {
+    try {
+        error.value = null;
+        modelStatus.value = getModelStatus();
+
+        await initModel((progressData) => {
+            if (progressData.status === 'downloading') {
+                progress.value = progressData.progress;
+            }
+        });
+
+        modelStatus.value = getModelStatus();
+    } catch (err) {
+        error.value = "模型加载失败: " + err.message;
+        modelStatus.value = getModelStatus();
+    }
+}
+
+async function send() {
+    if (!input.value.trim() || isSending.value) return;
+    if (!modelStatus.value.isLoaded) {
+        error.value = "请先加载模型";
+        return;
+    }
+
+    const userMessage = input.value.trim();
+    input.value = "";
+    isSending.value = true;
+    error.value = null;
+
+    messages.value.push({
+        role: "user",
+        content: userMessage,
+        timestamp: new Date()
+    });
+
+    try {
+        const response = await chat(userMessage, messages.value.slice(0, -1));
+        messages.value.push({
+            role: "ai",
+            content: response,
+            timestamp: new Date()
+        });
+    } catch (err) {
+        error.value = "发送失败: " + err.message;
+    } finally {
+        isSending.value = false;
+    }
+}
+
+function formatTime(date) {
+    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+}
+
+onMounted(() => {
+    modelStatus.value = getModelStatus();
+});
+</script>
+
+<template>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>AI 问答助手</h1>
+            <div class="model-status">
+                <button v-if="!modelStatus.isLoading && !modelStatus.isLoaded" @click="loadModel" class="load-btn">
+                    加载模型
+                </button>
+                <div v-else-if="modelStatus.isLoading" class="loading-status">
+                    <div class="spinner"></div>
+                    <span>加载中 {{ Math.round(progress * 100) }}%</span>
+                </div>
+                <div v-else class="loaded-status">
+                    <span class="status-dot"></span>
+                    <span>模型已就绪</span>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="error" class="error-message">
+            {{ error }}
+        </div>
+
+        <div class="messages-container">
+            <div v-if="messages.length === 0" class="welcome-message">
+                <h2>欢迎使用 AI 问答助手</h2>
+                <p>点击上方「加载模型」按钮开始聊天</p>
+            </div>
+            <div v-for="(item, index) in messages" :key="index" :class="['message', item.role]">
+                <div class="message-content">
+                    <div class="message-header">
+                        <span class="role">
+                            {{ item.role === 'user' ? '你' : 'AI' }}
+                        </span>
+                        <span class="time">{{ formatTime(item.timestamp) }}</span>
+                    </div>
+                    <p class="text">{{ item.content }}</p>
+                </div>
+            </div>
+            <div v-if="isSending" class="message ai">
+                <div class="message-content">
+                    <div class="message-header">
+                        <span class="role">AI</span>
+                    </div>
+                    <div class="typing-indicator">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="input-area">
+            <input v-model="input" @keyup.enter="send" :disabled="!modelStatus.isLoaded || isSending"
+                placeholder="输入你的问题..." class="chat-input" />
+            <button @click="send" :disabled="!modelStatus.isLoaded || isSending || !input.trim()" class="send-btn">
+                发送
+            </button>
+        </div>
+    </div>
+</template>
+
+<style scoped>
+.chat-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    max-width: 800px;
+    margin: 0 auto;
+    background: #f5f5f5;
+}
+
+.chat-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.chat-header h1 {
+    margin: 0;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.model-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.load-btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 20px;
+    background: white;
+    color: #667eea;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.load-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.loading-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.spinner {
+    width: 20px;
+    height: 20px;
+    border: 3px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.loaded-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    background: #4ade80;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.error-message {
+    padding: 12px 20px;
+    background: #fee2e2;
+    color: #dc2626;
+    border-left: 4px solid #dc2626;
+    font-size: 14px;
+}
+
+.messages-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.welcome-message {
+    text-align: center;
+    margin-top: 60px;
+    color: #666;
+}
+
+.welcome-message h2 {
+    margin-bottom: 10px;
+    color: #333;
+}
+
+.message {
+    display: flex;
+    gap: 12px;
+}
+
+.message.user {
+    justify-content: flex-end;
+}
+
+.message-content {
+    max-width: 75%;
+}
+
+.message.user .message-content {
+    align-items: flex-end;
+}
+
+.message-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.message.user .message-header {
+    justify-content: flex-end;
+}
+
+.role {
+    font-weight: 600;
+    font-size: 12px;
+    color: #666;
+}
+
+.time {
+    font-size: 11px;
+    color: #999;
+}
+
+.message .text {
+    padding: 12px 16px;
+    border-radius: 18px;
+    margin: 0;
+    line-height: 1.6;
+    font-size: 15px;
+    word-wrap: break-word;
+}
+
+.message.user .text {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-bottom-right-radius: 4px;
+}
+
+.message.ai .text {
+    background: white;
+    color: #333;
+    border-bottom-left-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.typing-indicator {
+    display: flex;
+    gap: 4px;
+    padding: 12px 16px;
+    background: white;
+    border-radius: 18px;
+    border-bottom-left-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.typing-indicator span {
+    width: 8px;
+    height: 8px;
+    background: #667eea;
+    border-radius: 50%;
+    animation: typing 1.4s infinite ease-in-out both;
+}
+
+.typing-indicator span:nth-child(1) {
+    animation-delay: -0.32s;
+}
+
+.typing-indicator span:nth-child(2) {
+    animation-delay: -0.16s;
+}
+
+@keyframes typing {
+
+    0%,
+    80%,
+    100% {
+        transform: scale(0);
+        opacity: 0.5;
+    }
+
+    40% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.input-area {
+    display: flex;
+    gap: 12px;
+    padding: 20px;
+    background: white;
+    border-top: 1px solid #e5e5e5;
+}
+
+.chat-input {
+    flex: 1;
+    padding: 14px 20px;
+    border: 2px solid #e5e5e5;
+    border-radius: 25px;
+    font-size: 15px;
+    outline: none;
+    transition: border-color 0.3s ease;
+}
+
+.chat-input:focus {
+    border-color: #667eea;
+}
+
+.chat-input:disabled {
+    background: #f5f5f5;
+    cursor: not-allowed;
+}
+
+.send-btn {
+    padding: 14px 28px;
+    border: none;
+    border-radius: 25px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.send-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.send-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* 滚动条样式 */
+.messages-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.messages-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.messages-container::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+.messages-container::-webkit-scrollbar-thumb:hover {
+    background: #a1a1a1;
+}
+</style>

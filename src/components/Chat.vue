@@ -51,6 +51,14 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function waitForRender() {
+    return new Promise(resolve => {
+        requestAnimationFrame(() => {
+            requestAnimationFrame(resolve);
+        });
+    });
+}
+
 async function typewriterEffect(text, index) {
     for (let i = 0; i < text.length; i++) {
         messages.value[index].content += text[i];
@@ -87,6 +95,9 @@ async function send() {
         content: "",
         timestamp: new Date()
     });
+
+    // 等待 UI 渲染完毕，确保用户消息和 AI 占位符先显示
+    await waitForRender();
 
     try {
         const response = await chat(userMessage, messages.value.slice(0, -1));

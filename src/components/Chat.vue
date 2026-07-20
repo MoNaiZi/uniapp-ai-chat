@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from "vue";
+import { ref, onMounted, nextTick } from "vue";
 import { initModel, chat, getModelStatus } from "../ai/model";
 
 const input = ref("");
@@ -9,6 +9,7 @@ const isSending = ref(false);
 const error = ref(null);
 const progress = ref(0);
 const progressText = ref("");
+const messagesContainer = ref(null);
 
 async function loadModel() {
     try {
@@ -38,6 +39,27 @@ async function loadModel() {
     }
 }
 
+function scrollToBottom() {
+    nextTick(() => {
+        if (messagesContainer.value) {
+            messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
+        }
+    });
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function typewriterEffect(text, index) {
+    for (let i = 0; i < text.length; i++) {
+        messages.value[index].content += text[i];
+        scrollToBottom();
+        // 调整打字速度，让效果更自然
+        await sleep(Math.random() * 30 + 20);
+    }
+}
+
 async function send() {
     if (!input.value.trim() || isSending.value) return;
     if (!modelStatus.value.isLoaded) {
@@ -50,21 +72,31 @@ async function send() {
     isSending.value = true;
     error.value = null;
 
+    // 立即添加用户消息
     messages.value.push({
         role: "user",
         content: userMessage,
         timestamp: new Date()
     });
+    scrollToBottom();
+
+    // 先添加 AI 消息占位符
+    const aiMessageIndex = messages.value.length;
+    messages.value.push({
+        role: "ai",
+        content: "",
+        timestamp: new Date()
+    });
 
     try {
         const response = await chat(userMessage, messages.value.slice(0, -1));
-        messages.value.push({
-            role: "ai",
-            content: response,
-            timestamp: new Date()
-        });
+        await typewriterEffect(response, aiMessageIndex);
     } catch (err) {
         error.value = "发送失败: " + err.message;
+        // 如果出错，移除 AI 消息
+        if (messages.value.length > aiMessageIndex) {
+            messages.value.splice(aiMessageIndex, 1);
+        }
     } finally {
         isSending.value = false;
     }
@@ -105,7 +137,7 @@ onMounted(() => {
             {{ error }}
         </div>
 
-        <div class="messages-container">
+        <div ref="messagesContainer" class="messages-container">
             <div v-if="messages.length === 0" class="welcome-message">
                 <h2>欢迎使用 AI 问答助手</h2>
                 <p>点击上方「加载模型」按钮开始聊天</p>
@@ -118,19 +150,11 @@ onMounted(() => {
                         </span>
                         <span class="time">{{ formatTime(item.timestamp) }}</span>
                     </div>
-                    <p class="text">{{ item.content }}</p>
-                </div>
-            </div>
-            <div v-if="isSending" class="message ai">
-                <div class="message-content">
-                    <div class="message-header">
-                        <span class="role">AI</span>
-                    </div>
-                    <div class="typing-indicator">
-                        <span></span>
-                        <span></span>
-                        <span></span>
-                    </div>
+                    <p class="text">
+                        {{ item.content }}
+                        <span v-if="item.role === 'ai' && isSending && index === messages.length - 1"
+                            class="cursor"></span>
+                    </p>
                 </div>
             </div>
         </div>
@@ -380,6 +404,28 @@ onMounted(() => {
     40% {
         transform: scale(1);
         opacity: 1;
+    }
+}
+
+.cursor {
+    display: inline-block;
+    width: 8px;
+    height: 16px;
+    background: #667eea;
+    margin-left: 4px;
+    animation: blink 1s infinite;
+    vertical-align: middle;
+}
+
+@keyframes blink {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0;
     }
 }
 

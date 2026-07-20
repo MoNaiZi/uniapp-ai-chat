@@ -8,6 +8,7 @@ const modelStatus = ref({ isLoading: false, isLoaded: false });
 const isSending = ref(false);
 const error = ref(null);
 const progress = ref(0);
+const progressText = ref("");
 
 async function loadModel() {
     try {
@@ -16,7 +17,17 @@ async function loadModel() {
 
         await initModel((progressData) => {
             if (progressData.status === 'downloading') {
-                progress.value = progressData.progress;
+                progress.value = progressData.progress || 0;
+                progressText.value = `正在下载 ${progressData.file}`;
+            } else if (progressData.status === 'progress') {
+                progress.value = progressData.progress || 0;
+                progressText.value = `正在加载 ${progressData.file}`;
+            } else if (progressData.status === 'initiate') {
+                progressText.value = `正在初始化 ${progressData.file}`;
+            } else if (progressData.status === 'done') {
+                progressText.value = `${progressData.file} 已完成`;
+            } else {
+                progressText.value = JSON.stringify(progressData);
             }
         });
 
@@ -78,7 +89,10 @@ onMounted(() => {
                 </button>
                 <div v-else-if="modelStatus.isLoading" class="loading-status">
                     <div class="spinner"></div>
-                    <span>加载中 {{ Math.round(progress * 100) }}%</span>
+                    <div class="loading-text">
+                        <div>模型加载中...</div>
+                        <div class="loading-detail">{{ progressText }}</div>
+                    </div>
                 </div>
                 <div v-else class="loaded-status">
                     <span class="status-dot"></span>
@@ -182,13 +196,24 @@ onMounted(() => {
 .loading-status {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
     font-size: 14px;
 }
 
+.loading-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.loading-detail {
+    font-size: 12px;
+    opacity: 0.8;
+}
+
 .spinner {
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
     border: 3px solid rgba(255, 255, 255, 0.3);
     border-top-color: white;
     border-radius: 50%;

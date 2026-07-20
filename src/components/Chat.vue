@@ -66,6 +66,8 @@ async function typewriterEffect(text, index) {
         // 调整打字速度，让效果更自然
         await sleep(Math.random() * 30 + 20);
     }
+    // 打字机效果完成后，更新时间戳为完成时间
+    messages.value[index].timestamp = new Date();
 }
 
 async function send() {
@@ -93,15 +95,22 @@ async function send() {
     messages.value.push({
         role: "ai",
         content: "",
-        timestamp: new Date()
+        timestamp: new Date(),
+        processingTime: null
     });
 
     // 等待 UI 渲染完毕，确保用户消息和 AI 占位符先显示
     await waitForRender();
 
+    // 开始计时
+    const startTime = Date.now();
+
     try {
         const response = await chat(userMessage, messages.value.slice(0, -1));
         await typewriterEffect(response, aiMessageIndex);
+        // 计算并保存处理时间
+        const endTime = Date.now();
+        messages.value[aiMessageIndex].processingTime = endTime - startTime;
     } catch (err) {
         error.value = "发送失败: " + err.message;
         // 如果出错，移除 AI 消息
@@ -114,7 +123,17 @@ async function send() {
 }
 
 function formatTime(date) {
-    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function formatProcessingTime(ms) {
+    if (ms === null) return '';
+    if (ms < 1000) {
+        return ` · ${ms}ms`;
+    } else {
+        const seconds = (ms / 1000).toFixed(2);
+        return ` · ${seconds}s`;
+    }
 }
 
 onMounted(() => {
@@ -159,7 +178,11 @@ onMounted(() => {
                         <span class="role">
                             {{ item.role === 'user' ? '你' : 'AI' }}
                         </span>
-                        <span class="time">{{ formatTime(item.timestamp) }}</span>
+                        <span class="time">
+                            {{ formatTime(item.timestamp) }}
+                            <span v-if="item.role === 'ai'" class="processing-time">{{
+                                formatProcessingTime(item.processingTime) }}</span>
+                        </span>
                     </div>
                     <p class="text">
                         {{ item.content }}
@@ -353,6 +376,15 @@ onMounted(() => {
 .time {
     font-size: 11px;
     color: #999;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.processing-time {
+    font-size: 10px;
+    color: #667eea;
+    opacity: 0.8;
 }
 
 .message .text {

@@ -62,7 +62,7 @@ export async function chat(userInput, context) {
     {
       role: "system",
       content:
-        "你是一个前端开发助手，精通 uni-app 和 Vue.js。以下是 uni-app 核心知识，请严格据此回答：\n\n" +
+        "/no_think 你是一个前端开发助手，精通 uni-app 和 Vue.js。以下是 uni-app 核心知识，请严格据此回答：\n\n" +
         UNIAPP_KNOWLEDGE +
         "\n\n回答规则：1) 优先参考上面的知识库给出准确代码 2) 给出完整可运行的代码示例 3) 用中文解释关键步骤。",
     },
@@ -85,7 +85,14 @@ export async function chat(userInput, context) {
     // v4 返回格式: [{generated_text: [{role, content}, ...]}]
     const generated = result[0].generated_text;
     const lastMsg = generated.at(-1);
-    return lastMsg.content || JSON.stringify(lastMsg);
+    let content = lastMsg.content || JSON.stringify(lastMsg);
+
+    // Qwen3 模型会输出 <think>...</think> 思考过程（可能不闭合），需要过滤
+    content = content.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, "").trim();
+    // 清理可能残留的 </think> 闭合标签
+    content = content.replace(/<\/think>/gi, "").trim();
+
+    return content;
   } catch (e) {
     console.error("聊天失败:", e);
     throw e;

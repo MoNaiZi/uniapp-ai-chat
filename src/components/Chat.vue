@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, nextTick } from "vue";
 import { initModel, chat, getModelStatus } from "../ai/model";
+import { marked } from "marked";
 
 const input = ref("");
 const messages = ref([]);
@@ -139,6 +140,11 @@ function formatProcessingTime(ms) {
 onMounted(() => {
     modelStatus.value = getModelStatus();
 });
+
+function renderMarkdown(text) {
+    if (!text) return "";
+    return marked.parse(text);
+}
 </script>
 
 <template>
@@ -184,11 +190,7 @@ onMounted(() => {
                                 formatProcessingTime(item.processingTime) }}</span>
                         </span>
                     </div>
-                    <p class="text">
-                        {{ item.content }}
-                        <span v-if="item.role === 'ai' && isSending && index === messages.length - 1"
-                            class="cursor"></span>
-                    </p>
+                    <p class="text" v-html="renderMarkdown(item.content)"></p>
                 </div>
             </div>
         </div>
@@ -407,6 +409,108 @@ onMounted(() => {
     color: #333;
     border-bottom-left-radius: 4px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* markdown 内容样式 */
+.message.ai .text :deep(pre) {
+    background: #1e1e1e;
+    color: #d4d4d4;
+    padding: 14px 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 10px 0;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.message.ai .text :deep(code) {
+    background: #f0f0f0;
+    color: #e74c3c;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.message.ai .text :deep(pre code) {
+    background: transparent;
+    color: #d4d4d4;
+    padding: 0;
+}
+
+.message.ai .text :deep(ul),
+.message.ai .text :deep(ol) {
+    padding-left: 20px;
+    margin: 8px 0;
+}
+
+.message.ai .text :deep(li) {
+    margin: 4px 0;
+    line-height: 1.6;
+}
+
+.message.ai .text :deep(blockquote) {
+    border-left: 3px solid #667eea;
+    padding-left: 12px;
+    margin: 10px 0;
+    color: #666;
+    background: #f8f8ff;
+    border-radius: 0 6px 6px 0;
+}
+
+.message.ai .text :deep(a) {
+    color: #667eea;
+    text-decoration: underline;
+}
+
+.message.ai .text :deep(h1),
+.message.ai .text :deep(h2),
+.message.ai .text :deep(h3),
+.message.ai .text :deep(h4) {
+    margin: 12px 0 6px;
+    line-height: 1.3;
+}
+
+.message.ai .text :deep(h1) {
+    font-size: 20px;
+}
+
+.message.ai .text :deep(h2) {
+    font-size: 18px;
+}
+
+.message.ai .text :deep(h3) {
+    font-size: 16px;
+}
+
+.message.ai .text :deep(table) {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 10px 0;
+    font-size: 13px;
+}
+
+.message.ai .text :deep(th),
+.message.ai .text :deep(td) {
+    border: 1px solid #ddd;
+    padding: 8px 12px;
+    text-align: left;
+}
+
+.message.ai .text :deep(th) {
+    background: #f5f5f5;
+    font-weight: 600;
+}
+
+.message.ai .text :deep(hr) {
+    border: none;
+    border-top: 1px solid #e5e5e5;
+    margin: 12px 0;
+}
+
+.message.ai .text :deep(p) {
+    margin: 6px 0;
+    line-height: 1.6;
 }
 
 .typing-indicator {

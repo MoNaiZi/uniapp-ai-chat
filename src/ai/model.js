@@ -23,6 +23,9 @@ export async function initModel(onProgress) {
       progress_callback: (progress) => {
         if (onProgress) onProgress(progress);
       },
+      tokenizer: {
+        chat_template_kwargs: { enable_thinking: false },
+      },
     });
     isLoaded = true;
     return true;
@@ -38,6 +41,9 @@ export async function initModel(onProgress) {
           device: "wasm",
           progress_callback: (progress) => {
             if (onProgress) onProgress(progress);
+          },
+          tokenizer: {
+            chat_template_kwargs: { enable_thinking: false },
           },
         },
       );
@@ -63,15 +69,15 @@ export async function chat(userInput, context, onToken) {
     {
       role: "system",
       content:
-        "/no_think 你是一个前端开发助手，精通 uni-app 和 Vue.js。以下是 uni-app 核心知识，请严格据此回答：\n\n" +
+        "你是一个前端开发助手，精通 uni-app 和 Vue.js。以下是 uni-app 核心知识，请严格据此回答：\n\n" +
         UNIAPP_KNOWLEDGE +
-        "\n\n回答规则：1) 优先参考上面的知识库给出准确代码 2) 给出完整可运行的代码示例 3) 用中文解释关键步骤。",
+        "\n\n回答规则：1) 优先参考上面的知识库给出准确代码 2) 给出完整可运行的代码示例 3) 用中文解释关键步骤。回答要简洁直接，不要输出推理过程。",
     },
     ...context.slice(-4).map((msg) => ({
       role: msg.role,
       content: msg.content,
     })),
-    { role: "user", content: userInput },
+    { role: "user", content: "/no_think " + userInput },
   ];
 
   const streamer = new TextStreamer(pipe.tokenizer, {
@@ -86,10 +92,12 @@ export async function chat(userInput, context, onToken) {
     const result = await pipe(messages, {
       max_new_tokens: 256,
       temperature: 0.5,
-      top_k: 30,
-      top_p: 0.9,
       do_sample: false,
       streamer,
+
+      chat_template_kwargs: {
+        enable_thinking: false,
+      },
     });
 
     // v4 返回格式: [{generated_text: [{role, content}, ...]}]

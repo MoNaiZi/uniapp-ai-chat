@@ -1,87 +1,100 @@
-import { pipeline, env } from "@xenova/transformers";
+import { pipeline } from "@huggingface/transformers";
+import UNIAPP_KNOWLEDGE from "./uniapp-knowledge.js";
 
-// 禁用本地模型加载，强制从 Hugging Face Hub 下载
-env.allowLocalModels = false;
-env.allowRemoteModels = true;
+/**
+ * AI 模型封装 - Transformers.js v4
+ * 模型: onnx-community/Qwen3-0.6B-ONNX (~300MB, q4f16 量化)
+ * 支持 WebGPU 加速（自动降级到 WASM）
+ */
 
 let pipe = null;
-let isLoading = false;
 let isLoaded = false;
 
-export async function initModel(onProgress = null) {
-  if (isLoaded) return true;
-  if (isLoading) return false;
+/**
+ * 加载模型，返回加载进度回调
+ */
+export async function initModel(onProgress) {
+  if (pipe) return true;
 
   try {
-    isLoading = true;
-    console.log("开始加载模型...");
-
-    pipe = await pipeline("text-generation", "Xenova/Qwen1.5-0.5B-Chat", {
-      device: "wasm",
+    pipe = await pipeline("text-generation", "onnx-community/Qwen3-0.6B-ONNX", {
+      dtype: "q4f16",
+      device: "webgpu",
       progress_callback: (progress) => {
-        console.log("加载进度:", progress);
-        if (onProgress) {
-          onProgress(progress);
-        }
+        if (onProgress) onProgress(progress);
       },
-      quantized: true,
     });
-
-    console.log("模型加载成功！");
     isLoaded = true;
-    isLoading = false;
     return true;
-  } catch (error) {
-    isLoading = false;
-    console.error("模型加载失败:", error);
-    console.error("错误详情:", error.message);
-    console.error("错误堆栈:", error.stack);
-    throw error;
+  } catch (e) {
+    // WebGPU 不可用时降级到 WASM
+    console.warn("WebGPU 不可用，降级到 WASM:", e.message);
+    try {
+      pipe = await pipeline(
+        "text-generation",
+        "onnx-community/Qwen3-0.6B-ONNX",
+        {
+          dtype: "q4f16",
+          device: "wasm",
+          progress_callback: (progress) => {
+            if (onProgress) onProgress(progress);
+          },
+        },
+      );
+      isLoaded = true;
+      return true;
+    } catch (e2) {
+      console.error("模型加载失败:", e2);
+      throw e2;
+    }
   }
 }
 
-export async function chat(message, context = []) {
-  if (!isLoaded) {
-    throw new Error("请先加载模型");
-  }
+/**
+ * 发送消息，返回 AI 回复
+ * @param {Array} context - 对话历史 [{role, content}]
+ * @param {string} userInput - 当前用户输入
+ */
+export async function chat(userInput, context) {
+  if (!pipe) throw new Error("模型尚未加载");
+
+  const messages = [
+    {
+      role: "system",
+      content:
+        "你是一个前端开发助手，精通 uni-app 和 Vue.js。以下是 uni-app 核心知识，请严格据此回答：\n\n" +
+        UNIAPP_KNOWLEDGE +
+        "\n\n回答规则：1) 优先参考上面的知识库给出准确代码 2) 给出完整可运行的代码示例 3) 用中文解释关键步骤。",
+    },
+    ...context.slice(-4).map((msg) => ({
+      role: msg.role,
+      content: msg.content,
+    })),
+    { role: "user", content: userInput },
+  ];
 
   try {
-    // 使用模型的聊天模板
-    const messages = [
-      { role: "system", content: "你是一个有用的AI助手。请简洁地回答问题。" },
-      ...context.map((msg) => ({
-        role: msg.role === "user" ? "user" : "assistant",
-        content: msg.content,
-      })),
-      { role: "user", content: message },
-    ];
-
-    // 应用聊天模板
-    const text = pipe.tokenizer.apply_chat_template(messages, {
-      tokenize: false,
-      add_generation_prompt: true,
-    });
-
-    console.log("发送的提示词:", text);
-
-    const result = await pipe(text, {
+    const result = await pipe(messages, {
       max_new_tokens: 256,
-      temperature: 0.7,
-      top_k: 50,
-      top_p: 0.95,
-      repetition_penalty: 1.1,
+      temperature: 0.5,
+      top_k: 30,
+      top_p: 0.9,
       do_sample: true,
-      return_full_text: false,
     });
 
-    console.log("模型输出:", result);
-    return result[0].generated_text.trim();
-  } catch (error) {
-    console.error("聊天失败:", error);
-    throw error;
+    // v4 返回格式: [{generated_text: [{role, content}, ...]}]
+    const generated = result[0].generated_text;
+    const lastMsg = generated.at(-1);
+    return lastMsg.content || JSON.stringify(lastMsg);
+  } catch (e) {
+    console.error("聊天失败:", e);
+    throw e;
   }
 }
 
+/**
+ * 模型是否已加载
+ */
 export function getModelStatus() {
-  return { isLoading, isLoaded };
+  return { isLoading: false, isLoaded };
 }

@@ -93,6 +93,7 @@ export async function chat(userInput, context, onToken) {
       max_new_tokens: 256,
       temperature: 0.5,
       do_sample: false,
+      num_beams: 1,
       streamer,
 
       chat_template_kwargs: {

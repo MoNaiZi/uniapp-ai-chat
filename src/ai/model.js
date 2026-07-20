@@ -1,4 +1,4 @@
-import { pipeline } from "@huggingface/transformers";
+import { pipeline, TextStreamer } from "@huggingface/transformers";
 import UNIAPP_KNOWLEDGE from "./uniapp-knowledge.js";
 
 /**
@@ -51,11 +51,12 @@ export async function initModel(onProgress) {
 }
 
 /**
- * 发送消息，返回 AI 回复
- * @param {Array} context - 对话历史 [{role, content}]
+ * 发送消息，返回 AI 回复（流式）
  * @param {string} userInput - 当前用户输入
+ * @param {Array} context - 对话历史 [{role, content}]
+ * @param {function} onToken - 流式回调，每生成一段文本时调用
  */
-export async function chat(userInput, context) {
+export async function chat(userInput, context, onToken) {
   if (!pipe) throw new Error("模型尚未加载");
 
   const messages = [
@@ -73,13 +74,22 @@ export async function chat(userInput, context) {
     { role: "user", content: userInput },
   ];
 
+  const streamer = new TextStreamer(pipe.tokenizer, {
+    skip_prompt: true,
+    skip_special_tokens: true,
+    callback_function: (text) => {
+      if (onToken) onToken(text);
+    },
+  });
+
   try {
     const result = await pipe(messages, {
       max_new_tokens: 256,
       temperature: 0.5,
       top_k: 30,
       top_p: 0.9,
-      do_sample: true,
+      do_sample: false,
+      streamer,
     });
 
     // v4 返回格式: [{generated_text: [{role, content}, ...]}]

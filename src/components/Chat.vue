@@ -48,27 +48,12 @@ function scrollToBottom() {
     });
 }
 
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 function waitForRender() {
     return new Promise(resolve => {
         requestAnimationFrame(() => {
             requestAnimationFrame(resolve);
         });
     });
-}
-
-async function typewriterEffect(text, index) {
-    for (let i = 0; i < text.length; i++) {
-        messages.value[index].content += text[i];
-        scrollToBottom();
-        // 调整打字速度，让效果更自然
-        await sleep(Math.random() * 30 + 20);
-    }
-    // 打字机效果完成后，更新时间戳为完成时间
-    messages.value[index].timestamp = new Date();
 }
 
 async function send() {
@@ -107,9 +92,12 @@ async function send() {
     const startTime = Date.now();
 
     try {
-        const response = await chat(userMessage, messages.value.slice(0, -1));
-        await typewriterEffect(response, aiMessageIndex);
-        // 计算并保存处理时间
+        // 流式输出：onToken 回调直接追加文本到消息
+        await chat(userMessage, messages.value.slice(0, -1), (text) => {
+            messages.value[aiMessageIndex].content += text;
+            scrollToBottom();
+        });
+        // 内容已流式显示完，直接记录处理时间
         const endTime = Date.now();
         messages.value[aiMessageIndex].processingTime = endTime - startTime;
     } catch (err) {

@@ -1,5 +1,4 @@
 import { pipeline, TextStreamer } from "@huggingface/transformers";
-import UNIAPP_KNOWLEDGE from "./uniapp-knowledge.js";
 
 /**
  * AI 模型封装 - Transformers.js v4
@@ -61,18 +60,25 @@ export async function initModel(onProgress) {
  * @param {string} userInput - 当前用户输入
  * @param {Array} context - 对话历史 [{role, content}]
  * @param {function} onToken - 流式回调，每生成一段文本时调用
+ * @param {string} ragContext - RAG 检索到的知识上下文（可选，空字符串则用默认提示）
  */
-export async function chat(userInput, context, onToken) {
+export async function chat(userInput, context, onToken, ragContext = "") {
   if (!pipe) throw new Error("模型尚未加载");
 
+  let systemContent;
+  if (ragContext) {
+    systemContent =
+      "你是一个前端开发助手，精通 uni-app 和 Vue.js。以下是与你回答相关的知识，请严格据此回答：\n\n" +
+      ragContext +
+      "\n\n回答规则：1) 优先参考上面的知识库给出准确代码 2) 给出完整可运行的代码示例 3) 用中文解释关键步骤。回答要简洁直接，不要输出推理过程。";
+  } else {
+    systemContent =
+      "你是一个前端开发助手，精通 uni-app 和 Vue.js。" +
+      "\n\n回答规则：1) 给出完整可运行的代码示例 2) 用中文解释关键步骤。回答要简洁直接，不要输出推理过程。";
+  }
+
   const messages = [
-    {
-      role: "system",
-      content:
-        "你是一个前端开发助手，精通 uni-app 和 Vue.js。以下是 uni-app 核心知识，请严格据此回答：\n\n" +
-        UNIAPP_KNOWLEDGE +
-        "\n\n回答规则：1) 优先参考上面的知识库给出准确代码 2) 给出完整可运行的代码示例 3) 用中文解释关键步骤。回答要简洁直接，不要输出推理过程。",
-    },
+    { role: "system", content: systemContent },
     ...context.slice(-4).map((msg) => ({
       role: msg.role,
       content: msg.content,

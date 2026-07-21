@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, nextTick } from "vue";
 import { initModel, chat, getModelStatus } from "../ai/model";
+import { retrieve, formatContext } from "../ai/rag";
 import { marked } from "marked";
 
 const input = ref("");
@@ -92,11 +93,15 @@ async function send() {
     const startTime = Date.now();
 
     try {
+        // RAG 检索：根据用户问题匹配相关知识
+        const ragResults = retrieve(userMessage, 3);
+        const ragContext = formatContext(ragResults);
+
         // 流式输出：onToken 回调直接追加文本到消息
         await chat(userMessage, messages.value.slice(0, -1), (text) => {
             messages.value[aiMessageIndex].content += text;
             scrollToBottom();
-        });
+        }, ragContext);
         // 内容已流式显示完，直接记录处理时间
         const endTime = Date.now();
         messages.value[aiMessageIndex].processingTime = endTime - startTime;
